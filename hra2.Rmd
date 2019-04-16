@@ -1,0 +1,127 @@
+---
+title: "HR Analytics - Leaver Prediction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+#### Loading the libraries and the dataset
+
+
+``` {r s1, warning = FALSE}
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+
+```
+
+``` {r s2,echo=FALSE,}
+h = read.csv("C:/Users/this pc/Documents/Kaggle/HRA/HR_comma_sep.csv",header = TRUE)
+
+```
+
+#### Exploratory Analysis is performed to understand these questions
+
+
+* (general thoughts marked in brackets) *
+* (the input levels - manhours,time spend) *
+* (output levels - projects, evaluation) *
+* (reaction (how do employees perceive/infer/reflect) - satisfaction levels) *
+* (action (wat is the outcomes/company perceive) - promotion levels, salary) *
+* (issues - disciplinary, accidents, etc) *
+
+#### what kind of people are leaving?
+
+``` {r s3}
+h %>% filter(left == 1) ->h.left
+summary(h.left$satisfaction_level)
+
+
+ggplot(h.left, aes(x=satisfaction_level)) + geom_histogram(binwidth=0.10)
+ggplot(h.left, aes(x=last_evaluation)) + geom_histogram(binwidth=0.10)
+ggplot(h.left, aes(x=number_project,y=..prop..)) + geom_bar()
+ggplot(h.left, aes(x=time_spend_company)) + geom_histogram(binwidth=1)
+ggplot(h.left, aes(x=salary,y=..count..)) + geom_bar()
+ggplot(h.left, aes(x=promotion_last_5years,y=..count..)) + geom_bar()
+
+```
+
+nearly 900 have very low satification levels and 1500 have less than average satisfaction levels  
+for nearly 1500 of them evaluation scores where less than 0.5  
+nearly 45% of them had only 2 projects in hand  
+tenure is between 3 to 5 years  
+nearly 2000 of them out of 3500 had low salary  
+nearly all of them have not been promoted in the last 5 years  
+
+#### are there any good talents leaving the company?
+even though some of them have less evaluation scores and satisfaction levels  
+some of them to be good talent and have had a good tenure of 3 to 5 years  
+one of the reasons seems to be : no promotion and low pay  
+
+#### how many left due to work_accident?
+
+``` {r s5}
+h.left %>% group_by(Work_accident) %>% summarize( count = n(),percent = round(n()/nrow(h.left)*100))
+```
+
+only 169 or 5% of them had left due to accidents
+
+### is there any danger of further attrition of good talent ?
+
+``` {r s6}
+h %>% filter(left==0) %>% 
+      filter(last_evaluation >0.7|satisfaction_level>0.7|number_project>3)->h.goodnotleft
+
+ggplot(h.goodnotleft, aes(x=salary,y=..count..)) + geom_bar()
+ggplot(h.goodnotleft, aes(x=promotion_last_5years,y=..count..)) + geom_bar()
+```
+
+a big yes - nearly 4500 have been paid low. out of 10002, almost none of them have not been promoted
+
+``` {r s7}
+ggplot(h.goodnotleft, aes(x=number_project,y=..prop..)) + geom_bar()
+ggplot(h.goodnotleft, aes(x=average_montly_hours)) + geom_histogram(binwidth = 50)
+```
+
+they seem to be overworked with more than 50 hours per week for 6000 of them  
+65% are handling 4 or more projects  
+
+
+#### we create model to retain the most valuable employees
+
+``` {r s8}
+h %>% filter(last_evaluation >0.7|satisfaction_level>0.7|number_project>3)->h.good
+
+h.good$left <- as.factor(h.good$left)
+table(h.good$left)
+
+train_control<- trainControl(method="cv", number=5, repeats=3)
+# train the model 
+rpartmodel<- train(left~., data=h.good, trControl=train_control, method="rpart")
+# make predictions
+predictions<- predict(rpartmodel,h.good)
+hr_model_tree<- cbind(h.good,predictions)
+# summarize results
+confusionMatrix<- confusionMatrix(hr_model_tree$predictions,hr_model_tree$left)
+confusionMatrix
+```
+
+``` {r s9}
+e1071model2 <- train(left~., data=h.good, trControl=train_control, method="nb")
+# make predictions
+predictions<- predict(e1071model2,h.good)
+e1071modelbinded <- cbind(h.good,predictions)
+# summarize results
+confusionMatrix<- confusionMatrix(e1071modelbinded$predictions,e1071modelbinded$left)
+confusionMatrix
+```

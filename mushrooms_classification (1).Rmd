@@ -1,0 +1,181 @@
+---
+title: "Mushroom Classification"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	error = TRUE
+)
+```
+
+#### Loading all packages
+
+```{r s1,warning = FALSE,error=FALSE}
+library(data.table)
+library(testthat)
+library(gridExtra)
+library(corrplot)
+library(ggplot2)
+library(e1071)
+library(dplyr)
+library(lsr)
+library(logistf)
+library(caret)
+library(caTools)
+library(randomForest)
+library(rpart)
+library(rpart.utils)
+library(rpart.plot)
+library(rockchalk)
+library(brglm)
+library(plotrix)
+```
+
+#### Exploratory Data Analysis
+
+``` {r s2}
+mushrooms = read.csv("mushrooms.csv",header=T)
+str(mushrooms)
+```
+
+Since all the variables are cetegorical. chi square test tells the association between all categorical variables
+
+#### loop on all variables in dataframe for chi square test
+
+``` {r s3,error=TRUE}
+mushrooms$freq=1
+mushrooms$veil.type = NULL
+mat = matrix(nrow=23,ncol=23, byrow = TRUE, dimnames= list(names(mushrooms),names(mushrooms)))
+
+for(i in 1:ncol(mushrooms))
+{
+  for(j in 1:ncol(mushrooms))
+  {
+    #print(i)
+    #print(j)
+    temp = xtabs(freq~mushrooms[,j]+mushrooms[,i], data = mushrooms)
+    ##temp2= chisq.test(temp)
+    mat[i,j]= cramersV(temp)
+  }
+}
+
+cellcol<-color.scale(cbind(mat,c(-1,rep(1,22))),c(0,1),0,c(1,0))[,1:13]
+par(mar = c(8,8,0.1,0.1) + 0.3)
+
+color2D.matplot(mat,cellcolors=cellcol,show.legend=TRUE,show.values=1,
+                axes=FALSE, xlab="",ylab="")
+
+axis(1,at=0.5:22.5,las=2,labels=colnames(mat))
+axis(2,at=0.5:22.5,las=2,labels=rev(rownames(mat)))
+```
+
+finding out the important variables that have high association with depenedent variable using above plot variables
+
+odor
+surface.above.ring
+surface.below.ring
+color.above.ring
+color.below.ring
+ring.type
+spore.print.color
+population
+gill.color
+gill.size
+
+#### running a histogram on all variables to see how spread the data is 
+
+``` {r s5,error=TRUE}
+plotHist <- function(data_in, i) {
+  data <- data.frame(x=data_in[[i]])
+  p <- ggplot(data=data, aes(x=factor(x))) + stat_count() + xlab(colnames(data_in)[i]) + theme_light() + 
+    theme(axis.text.x = element_text(angle = 90, hjust =1))
+  return (p)
+}
+doPlots <- function(data_in, fun, ii, ncol=3) {
+  pp <- list()
+  for (i in ii) {
+    p <- fun(data_in=data_in, i=i)
+    pp <- c(pp, list(p))
+  }
+  do.call("grid.arrange", c(pp, ncol=ncol))
+}
+
+doPlots(mushrooms, fun = plotHist, ii = 16:23, ncol = 2)
+```
+
+We are able to see that some facotor levels contain very less data than other factor levels. For example spore.print.color variable has very less data in factor levels b,h,o,r,u Therefore combining the factor levels for  which the data is less than 10% in that level
+
+``` {r s7}
+ncol = ncol(mushrooms)
+for(i in 1:ncol)
+{
+  #print(i)
+  temp = table(mushrooms[,i])
+  #print(temp)
+  y=(prop.table(temp))*100
+  #print(y)
+  z = which(sapply(y,function(x)x<10))
+  #print(z)
+  name = names(z)
+  #print(name)
+  mushrooms[,i] = combineLevels(mushrooms[,i],levs= name, newLabel = "o")
+  
+}
+```
+
+It can also be seen that veil type has only one factor level so set it null
+
+#### Lets split the data into test ans train
+
+``` {r s8}
+mushrooms$veil.type = NULL
+sample = sample.split(mushrooms$class, SplitRatio = .7)
+train = subset(mushrooms, sample == TRUE)
+test = subset(mushrooms, sample == FALSE)
+```
+
+
+#### build a simple logistic regression model
+
+``` {r s9}
+train$class=ifelse(train$class=="e",1,0)
+test$class = ifelse(test$class=="e",1,0)
+
+logmodel = glm(class~odor+stalk.surface.above.ring+stalk.surface.below.ring+stalk.color.above.ring+stalk.color.below.ring+ring.type+spore.print.color+population+gill.color+gill.size, data = train, family = binomial)
+summary(logmodel)
+```
+
+there is huge quasi separation so should go for firth logistic regression model
+
+``` {r s10}
+logmodel2 = logistf(class~odor+stalk.surface.above.ring+stalk.color.above.ring+ring.type+spore.print.color+population+gill.size, data = train, family = binomial)
+summary(logmodel2)
+logmodel3 = brglm(class~odor+stalk.surface.above.ring+stalk.color.above.ring+ring.type+spore.print.color+population+gill.size, data = train, family = binomial)
+summary(logmodel3)
+pred = predict(logmodel3, newdata= test, type = "response")
+table(test$class,pred>0.5)
+```
+
+#### Building a decision tree and testing for accuracy
+
+``` {r s11}
+treemodel = rpart(class~odor+stalk.surface.above.ring+stalk.color.above.ring+ring.type+spore.print.color+population+gill.size, method = "class", data = train)
+rpart.plot(treemodel)
+predTree= predict(treemodel, newdata= test, type = "prob")
+confusionMatrix(table(test$class,predTree))
+rpart.rules.table(treemodel)
+```
+
+#### Building random Forest model and checking for accuracy 
+
+``` {r s12, error = TRUE, warning = FALSE}
+train$class = as.factor(train$class)
+test$class = as.factor(test$class)
+forestmodel = randomForest(class~odor+stalk.surface.above.ring+stalk.color.above.ring+ring.type+spore.print.color+population+gill.size, data = train)
+predforest = predict(forestmodel, newdata = test, type = "prob")
+confusionMatrix(table(test$class,predforest))
+```

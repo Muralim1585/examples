@@ -1,0 +1,87 @@
+---
+title: "Classification when all Independent variables are Categorical"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Loading in the Libraries
+
+install.packages("testthat")
+install.packages("gridExtra")
+install.packages("corrplot")
+install.packages("GGally")
+install.packages("e1071")
+install.packages("lsr")
+install.packages("logistf")
+install.packages("caTools")
+install.packages("randomForest")
+install.packages("rpart")
+install.packages("rpart.utils")
+install.packages("rpart.plot")
+install.packages("rockchalk")
+install.packages("brglm")
+install.packages("plotrix")
+
+```{r cars}
+library(data.table)
+library(testthat)
+library(gridExtra)
+library(corrplot)
+library(GGally)
+library(ggplot2)
+library(e1071)
+library(dplyr)
+library(lsr)
+library(logistf)
+library(caret)
+library(caTools)
+library(randomForest)
+library(rpart)
+library(rpart.utils)
+library(rpart.plot)
+library(rockchalk)
+library(brglm)
+library(plotrix)
+```
+
+#### Exploratory Data Analysis
+
+Since all the variables are cetegorical.. chi square test tells the association between all categorical variable loop on all variables in dataframe for chi square test
+
+```{r read}
+mushrooms = read.csv("C:/Users/this pc/Documents/Kaggle/mushrooms.csv",header=T)
+
+mushrooms$freq=1
+
+mat = matrix(nrow=23,ncol=23, byrow = TRUE, dimnames= list(names(mushrooms),names(mushrooms)))
+
+for(i in 1:ncol(mushrooms))
+{
+  for(j in 1:ncol(mushrooms))
+  {
+    print(i)
+    print(j)
+    temp = xtabs(freq~mushrooms[,j]+mushrooms[,i], data = mushrooms)
+    ##temp2= chisq.test(temp)
+    mat[i,j]= cramersV(temp)
+  }
+}
+
+```
+
+
+#### Now plotting a matrix using 2dMatplot
+
+``` {r eplot}
+cellcol<-color.scale(cbind(mat,c(-1,rep(1,22))),c(0,1),0,c(1,0))[,1:13]
+par(mar = c(8,8,0.1,0.1) + 0.3)
+
+color2D.matplot(mat,cellcolors=cellcol,show.legend=TRUE,show.values=1,
+                axes=FALSE, xlab="",ylab="")
+
+axis(1,at=0.5:22.5,las=2,labels=colnames(mat))
+axis(2,at=0.5:22.5,las=2,labels=rev(rownames(mat)))
+```

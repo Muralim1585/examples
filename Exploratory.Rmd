@@ -1,0 +1,108 @@
+---
+title: "Exploratory Data Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	error = TRUE
+)
+```
+
+
+```{r s1,warning = FALSE,error=FALSE, echo= FALSE}
+library(data.table)
+library(testthat)
+library(gridExtra)
+library(corrplot)
+library(corrgram)
+library(ggplot2)
+library(e1071)
+library(dplyr)
+library(lsr)
+library(logistf)
+library(caret)
+library(caTools)
+library(randomForest)
+library(rpart)
+library(rpart.utils)
+library(rpart.plot)
+library(rockchalk)
+library(brglm)
+library(plotrix)
+```
+
+
+``` {r s2, echo = FALSE}
+mushrooms = read.csv("C:/Users/this pc/Documents/Kaggle/mushrooms.csv",header=T)
+#str(mushrooms)
+```
+
+#### Test of Association for Continuous Variables
+
+This is an example using a correlation plot across all the variables in the dataset. Use patterns to understand the level of correlation between these variables.
+
+
+```{r s2.2}
+corrgram(mtcars, order=NULL, lower.panel=panel.shade,
+  upper.panel=NULL, text.panel=panel.txt,
+  main="Car Milage Data (unsorted)")
+```
+
+
+#### Test of Association for Categorical Variables
+
+Just like correlation for continuous variables we can use the following chi square plot to find the association between categorical variables using chi square test of associations and plotting it.
+
+
+``` {r s3,error=TRUE}
+mushrooms$freq=1
+mushrooms$veil.type = NULL
+mat = matrix(nrow=23,ncol=23, byrow = TRUE, dimnames= list(names(mushrooms),names(mushrooms)))
+
+for(i in 1:ncol(mushrooms))
+{
+  for(j in 1:ncol(mushrooms))
+  {
+    #print(i)
+    #print(j)
+    temp = xtabs(freq~mushrooms[,j]+mushrooms[,i], data = mushrooms)
+    ##temp2= chisq.test(temp)
+    mat[i,j]= cramersV(temp)
+  }
+}
+
+cellcol<-color.scale(cbind(mat,c(-1,rep(1,22))),c(0,1),0,c(1,0))[,1:13]
+par(mar = c(8,8,0.1,0.1) + 0.3)
+
+color2D.matplot(mat,cellcolors=cellcol,show.legend=TRUE,show.values=1,
+                axes=FALSE, xlab="",ylab="")
+
+axis(1,at=0.5:22.5,las=2,labels=colnames(mat))
+axis(2,at=0.5:22.5,las=2,labels=rev(rownames(mat)))
+```
+
+
+#### An Example of creating small multiples by different categorical variables to analyze the data
+
+``` {r s5,error=TRUE}
+plotHist <- function(data_in, i) {
+  data <- data.frame(x=data_in[[i]])
+  p <- ggplot(data=data, aes(x=factor(x))) + stat_count() + xlab(colnames(data_in)[i]) + theme_light() + 
+    theme(axis.text.x = element_text(angle = 90, hjust =1))
+  return (p)
+}
+doPlots <- function(data_in, fun, ii, ncol=3) {
+  pp <- list()
+  for (i in ii) {
+    p <- fun(data_in=data_in, i=i)
+    pp <- c(pp, list(p))
+  }
+  do.call("grid.arrange", c(pp, ncol=ncol))
+}
+
+doPlots(mushrooms, fun = plotHist, ii = 16:23, ncol = 2)
+```
